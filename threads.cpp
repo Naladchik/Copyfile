@@ -5,6 +5,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <filesystem>
+#include <chrono>
 
 #define COPY_STL false
 
@@ -34,7 +35,7 @@ void readFile(const std::string& sourceFileName) {
         {
             std::unique_lock<std::mutex> lock(mtx);  //
             cv.wait(lock, [] { return !hasData; });
-            v_buffer.assign(tempBuffer, tempBuffer + bytesRead); // [action] copiing must be optimized
+            v_buffer.assign(tempBuffer, tempBuffer + bytesRead); // [action] copying must be optimized
             hasData = true;
         }
         cv.notify_one(); // Notify the writer thread that data is available
@@ -86,6 +87,8 @@ int main() {
 
     std::cout << "copying started" << std::endl;
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     if(COPY_STL){
         std::filesystem::copy(sourceFileName, destinationFileName); // copy file
         std::cout << "File copied successfully with std::filesystem::copy!" << std::endl;
@@ -100,5 +103,13 @@ int main() {
 
         std::cout << "File copied successfully with two threads!" << std::endl;
     }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    std::cout << "execution duration: " << duration.count() << " ms" << std::endl;
+
+    std::filesystem::remove(destinationFileName);
+    std::cout << "copy " << destinationFileName << " was deleted" << std::endl;
+
     return 0;
 }
