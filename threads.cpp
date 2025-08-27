@@ -81,9 +81,9 @@ int main() {
     //std::cin >> sourceFileName;
     //std::cout << "Enter the destination file name: ";
     //std::cin >> destinationFileName;
-    sourceFileName = "file_to_copy.txt";
+    sourceFileName = "source.txt";
     //sourceFileName = "cat_compilation.mp4";
-    destinationFileName = "copy.txt";
+    destinationFileName = "destination.txt";
 
     std::cout << "copying started" << std::endl;
 

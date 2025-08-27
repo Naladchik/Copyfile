@@ -2,34 +2,30 @@
 
 ./copy_file
 
-if diff file_to_copy.txt copy.txt > /dev/null; then
-	echo "file_to_copy.txt and copy.txt are the same"
-	rm copy.txt
-	echo "copy.txt was deleted"
-	echo ""
+if diff source.txt destination.txt > /dev/null; then
+	echo "source.txt and destination.txt are the same"
+	rm destination.txt
+	echo "destination.txt was deleted"
 else
-	echo "file_to_copy.txt and copy.txt are different!"
+	echo "source.txt and destination.txt are are different!"
 fi
 
 ./copy_file
 
-if diff file_to_copy.txt copy.txt > /dev/null; then
-	echo "file_to_copy.txt and copy.txt are the same"
-	rm copy.txt
-	echo "copy.txt was deleted"
-	echo ""
+if diff source.txt destination.txt > /dev/null; then
+	echo "source.txt and destination.txt are the same"
+	rm destination.txt
+	echo "destination.txt was deleted"
 else
-	echo "file_to_copy.txt and copy.txt are different!"
+	echo "source.txt and destination.txt are are different!"
 fi
 
 ./copy_file
 
-if diff file_to_copy.txt copy.txt > /dev/null; then
-	echo "file_to_copy.txt and copy.txt are the same"
-	rm copy.txt
-	echo "copy.txt was deleted"
-	echo ""
+if diff source.txt destination.txt > /dev/null; then
+	echo "source.txt and destination.txt are the same"
+	rm destination.txt
+	echo "destination.txt was deleted"
 else
-	echo "file_to_copy.txt and copy.txt are different!"
+	echo "source.txt and destination.txt are are different!"
 fi
-
