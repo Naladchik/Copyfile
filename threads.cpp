@@ -85,8 +85,6 @@ int main() {
     //sourceFileName = "cat_compilation.mp4";
     destinationFileName = "destination.txt";
 
-    std::cout << "copying started" << std::endl;
-
     auto start = std::chrono::high_resolution_clock::now();
 
     if(COPY_STL){
@@ -100,8 +98,6 @@ int main() {
         // Wait for both threads to complete
         readerThread.join();
         writerThread.join();
-
-        std::cout << "File copied successfully with two threads!" << std::endl;
     }
 
     auto end = std::chrono::high_resolution_clock::now();
