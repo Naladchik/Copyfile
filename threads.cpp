@@ -108,8 +108,5 @@ int main() {
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     std::cout << "execution duration: " << duration.count() << " ms" << std::endl;
 
-    std::filesystem::remove(destinationFileName);
-    std::cout << "copy " << destinationFileName << " was deleted" << std::endl;
-
     return 0;
 }
