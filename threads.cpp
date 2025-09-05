@@ -7,7 +7,7 @@
 #include <filesystem>
 #include <chrono>
 
-#define CHUNK_SIZE 50
+#define CHUNK_SIZE 65535
 #define ONE 1
 #define TWO 2
 
