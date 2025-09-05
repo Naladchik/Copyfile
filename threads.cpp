@@ -7,102 +7,110 @@
 #include <filesystem>
 #include <chrono>
 
-#define COPY_STL false
+#define CHUNK_SIZE 50
+#define ONE 1
+#define TWO 2
 
-std::mutex mtx;
-std::condition_variable cv;
-std::vector<char> v_buffer;
-bool hasData = false; // Indicates if the buffer contains data
-bool doneReading = false; // Indicates if reading is complete
+// sharable global variables
+char buf1[CHUNK_SIZE];
+char buf2[CHUNK_SIZE];
+char p_c_end = 0;  // write in producer read in consumer
+int  p_c_actual_size = 0;
+bool p_c_b1_full = false;  // write in producer read in consumer
+bool p_c_b2_full = false;  // write in producer read in consumer
+bool c_p_b1_empty = true;  // write in consumer read in producer
+bool c_p_b2_empty = true;  // write in consumer read in producer
 
-void readFile(const std::string& sourceFileName) {
-    std::ifstream sourceFile(sourceFileName, std::ios::binary);
-    if (!sourceFile) {
-        std::cerr << "Error: Could not open source file!" << std::endl;
-        return;
-    }
 
-    // Read the file's content into chunks, one at a time.
-    const std::size_t chunkSize = 1024; // 1 KB buffer
-    char tempBuffer[chunkSize];  // local buffer for (redundant) copying of one chunk
+void producer(const std::string& input_file_name)
+{
+    // ===== intro part =====
+    std::ifstream input_file(input_file_name, std::ios::binary);
+    char p_buf_in_use = ONE;  // can be ONLY 1 or 2
 
-    while (!sourceFile.eof()) {
-        // Read a chunk of data.
-        sourceFile.read(tempBuffer, chunkSize);
-        std::streamsize bytesRead = sourceFile.gcount();  // this value is chunkSize until the last chunk (it can be less than hcunkSize)
+    // ===== loop ===========
+    while (!input_file.eof()) {
+        if(ONE == p_buf_in_use){
+            while(! c_p_b1_empty){}  // wait for signal from consumer
+            c_p_b1_empty = false;
 
-        // Lock the mutex and update the shared buffer
-        {
-            std::unique_lock<std::mutex> lock(mtx);  //
-            cv.wait(lock, [] { return !hasData; });
-            v_buffer.assign(tempBuffer, tempBuffer + bytesRead); // [action] copying must be optimized
-            hasData = true;
-        }
-        cv.notify_one(); // Notify the writer thread that data is available
-    }
+            input_file.read(buf1, CHUNK_SIZE);
+            p_c_actual_size = input_file.gcount();  // transmit size to consumer
 
-    // Signal that reading is finished
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        doneReading = true;
-    }
-    cv.notify_one(); // Notify the writer thread of completion
-    sourceFile.close();
-}
+            p_c_b1_full = true;  // send signal to cunsumer
+            // p_buf_in_use = TWO;  // internal switch
+        }else{  // TWO == p_buf_in_use
+            while(! c_p_b2_empty){}  // wait for signal from cunsumer
+            c_p_b2_empty = false;
 
-void writeFile(const std::string& destinationFileName) {
-    std::ofstream destinationFile(destinationFileName, std::ios::binary);
-    if (!destinationFile) {
-        std::cerr << "Error: Could not open or create destination file!" << std::endl;
-        return;
-    }
+            input_file.read(buf2, CHUNK_SIZE);
+            p_c_actual_size = input_file.gcount();  // transmit size to consumer
 
-    while (true) {
-        std::unique_lock<std::mutex> lock(mtx);
-        cv.wait(lock, [] { return hasData || doneReading; });
-
-        if (hasData) {
-            // Write data from the buffer to the file
-            destinationFile.write(v_buffer.data(), v_buffer.size());  // writes the whole buffer
-            hasData = false;
-            cv.notify_one(); // Notify the reader thread that buffer is empty
-        } else if (doneReading) {
-            break; // Exit the loop if reading is complete
+            p_c_b2_full = true;  // send signal to cunsumer
+            p_buf_in_use = ONE;  // internal switch
         }
     }
-    destinationFile.close();
+
+    // ===== final part =====
+    p_c_end = 1;
+    input_file.close();
 }
 
-int main() {
-    std::string sourceFileName, destinationFileName;
+void consumer(const std::string& output_file_name)
+{
+    // ===== intro part =====
+    std::ofstream output_file(output_file_name, std::ios::binary);
+    char c_buf_in_use = ONE;  // can be ONLY 1 or 2
 
-    // Get the source and destination file names
-    //std::cout << "Enter the source file name: ";
-    //std::cin >> sourceFileName;
-    //std::cout << "Enter the destination file name: ";
-    //std::cin >> destinationFileName;
-    sourceFileName = "source.txt";
-    //sourceFileName = "cat_compilation.mp4";
-    destinationFileName = "destination.txt";
+    // ===== loop ===========
+    while(true){
+        if(ONE == c_buf_in_use){
+            while(! p_c_b1_full){}  // wait for signal from producer
+            p_c_b1_full = false;
 
-    auto start = std::chrono::high_resolution_clock::now();
+            output_file.write(buf1, p_c_actual_size);
 
-    if(COPY_STL){
-        std::filesystem::copy(sourceFileName, destinationFileName); // copy file
-        std::cout << "File copied successfully with std::filesystem::copy!" << std::endl;
-    }else{
-        // Create the reader and writer threads
-        std::thread readerThread(readFile, sourceFileName);
-        std::thread writerThread(writeFile, destinationFileName);
+            c_p_b1_empty = true;  // send signal to producer
+            // c_buf_in_use = TWO;  // internal switch
+        }else{  // TWO == c_buf_in_use
+            while(! p_c_b2_full){}  // wait for signal from producer
+            p_c_b2_full = false;
 
-        // Wait for both threads to complete
-        readerThread.join();
-        writerThread.join();
+            output_file.write(buf2, p_c_actual_size);
+
+            c_p_b2_empty = true;  // send signal to producer
+            c_buf_in_use = ONE;  // internal switch
+        }
+
+        if(p_c_end)break;
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
+    // ===== final part =====    
+    output_file.close();
+}
+
+int main()
+{
+    auto start = std::chrono::high_resolution_clock::now();  // start of timer
+    // ----------------------------------------------------------------------------------------
+
+    std::string v_input_name, v_output_name;
+
+    v_input_name = "input.txt";
+    v_output_name = "output.txt";
+
+    // Create the reader and writer threads
+    std::thread reader_thread(producer, v_input_name);
+    std::thread writer_thread(consumer, v_output_name);
+
+    // Wait for both threads to complete
+    reader_thread.join();
+    writer_thread.join();
+
+
+    // ----------------------------------------------------------------------------------------
+    auto end = std::chrono::high_resolution_clock::now();  // stop of timer
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    std::cout << "execution duration: " << duration.count() << " ms" << std::endl;
-
+    std::cout << "execution duration: " << duration.count() << " us" << std::endl;
     return 0;
 }
