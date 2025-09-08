@@ -9,14 +9,17 @@
 
 using namespace std;
 
+#define COPY_WITH_STL false
+
 #define CHUNK_SIZE 65535
+//#define CHUNK_SIZE 2000
 
 // sharable global variables
 char buf1[CHUNK_SIZE];
 char buf2[CHUNK_SIZE];
 char * buf_from_file = buf1;
 char * buf_to_file = buf1;
-unsigned char p_c_actual_size;
+unsigned int p_c_actual_size;
 bool data_ready = false;
 bool write_finished = true;
 bool finish = false;
@@ -41,7 +44,7 @@ void producer(const std::string& input_file_name)
             cv2.wait(lock, [] { return write_finished; });
             write_finished = false; 
         }
-        cout << "reading" << endl;
+        //cout << "reading" << endl;
         input_file.read(buf_from_file, CHUNK_SIZE);
         p_c_actual_size = input_file.gcount();  // transmit size to consumer
         {
@@ -69,7 +72,7 @@ void consumer(const std::string& output_file_name)
             cv1.wait(lock, [] { return data_ready; });
             data_ready = false; 
         }
-        cout << "writing" << endl;
+        // cout << "writing" << endl;
         output_file.write(buf_to_file, p_c_actual_size);
         buff_toggle(&buf_to_file);
         {
@@ -94,14 +97,17 @@ int main()
     v_input_name = "input.txt";
     v_output_name = "output.txt";
 
-    // Create the reader and writer threads
-    std::thread reader_thread(producer, v_input_name);
-    std::thread writer_thread(consumer, v_output_name);
+    if(COPY_WITH_STL){
+        filesystem::copy_file(v_input_name, v_output_name);
+    }else{
+        // Create the reader and writer threads
+        std::thread reader_thread(producer, v_input_name);
+        std::thread writer_thread(consumer, v_output_name);
 
-    // Wait for both threads to complete
-    reader_thread.join();
-    writer_thread.join();
-
+        // Wait for both threads to complete
+        reader_thread.join();
+        writer_thread.join();
+    }
 
     // ----------------------------------------------------------------------------------------
     auto end = std::chrono::high_resolution_clock::now();  // stop of timer
