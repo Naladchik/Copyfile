@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <filesystem>
 #include <chrono>
+#include <cstring>
 
 using namespace std;
 
@@ -23,9 +24,10 @@ unsigned int p_c_actual_size;
 bool data_ready = false;
 bool write_finished = true;
 bool finish = false;
+std::string v_input_name, v_output_name;
 
 mutex mtx;
-condition_variable cv1, cv2;
+condition_variable cv;
 
 void buff_toggle(char ** buf){
     if(*buf == buf1) *buf = buf2; else *buf = buf1;
@@ -41,7 +43,7 @@ void producer(const std::string& input_file_name)
     while (!input_file.eof()) {
         {
             unique_lock<mutex> lock(mtx);
-            cv2.wait(lock, [] { return write_finished; });
+            cv.wait(lock, [] { return write_finished; });
             write_finished = false; 
         }
         //cout << "reading" << endl;
@@ -50,7 +52,7 @@ void producer(const std::string& input_file_name)
         {
             lock_guard<mutex> lock(mtx);
             data_ready = true;        
-            cv1.notify_one();
+            cv.notify_one();
         }
         buff_toggle(&buf_from_file);
     }
@@ -69,7 +71,7 @@ void consumer(const std::string& output_file_name)
     while(true){
         {
             unique_lock<mutex> lock(mtx);
-            cv1.wait(lock, [] { return data_ready; });
+            cv.wait(lock, [] { return data_ready; });
             data_ready = false; 
         }
         // cout << "writing" << endl;
@@ -78,7 +80,7 @@ void consumer(const std::string& output_file_name)
         {
             lock_guard<mutex> lock(mtx);
             write_finished = true;        
-            cv2.notify_one();
+            cv.notify_one();
         }        
         if(finish) break;
     }
@@ -87,15 +89,32 @@ void consumer(const std::string& output_file_name)
     output_file.close();
 }
 
-int main()
+int main(int argc, char*argv[])
 {
+    if(2 > argc) {printf("You enter no arguments. For help use --help command.\n"); return 1;}
+	if(2 == argc){
+		if(strcmp(argv[1], "--help")){
+			printf("Unknown key %s.\n", argv[1]); return 1;
+		}else{
+			printf("Enter copy_file <in file> -a <out file> to copy with implemented here utiity.\n");
+			printf("Enter copy_file <in file> -b <out file> to copy with standard copy_file() function.\n"); 
+			printf("Examples: copy_file input.txt -a output.txt.\n"); 
+			return 0;
+		}	
+	}
+	if(3 == argc) {printf("Impossible argument combination %s %s. For help use --help command.\n", argv[1], argv[2]); return 1;}
+	if(4 == argc) {
+		if(strcmp(argv[2], "-a") && strcmp(argv[2], "-b")){
+			printf("Uncnown command %s. Enter copy_file --help for help.\n", argv[2]); return 1;
+		}else{
+            v_input_name = argv[1];
+            v_output_name = argv[3];
+        }
+	}
+	if(4 < argc) {printf("You enter too many arguments. For help use --help command.\n"); return 1;}
+
     auto start = std::chrono::high_resolution_clock::now();  // start of timer
     // ----------------------------------------------------------------------------------------
-
-    std::string v_input_name, v_output_name;
-
-    v_input_name = "input.txt";
-    v_output_name = "output.txt";
 
     if(COPY_WITH_STL){
         filesystem::copy_file(v_input_name, v_output_name);
