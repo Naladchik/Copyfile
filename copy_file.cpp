@@ -10,29 +10,21 @@
 
 using namespace std;
 
-#define COPY_WITH_STL false
-
-#define CHUNK_SIZE 65535
-//#define CHUNK_SIZE 2000
+constexpr unsigned int chunk_size = 65535;
 
 // sharable global variables
-char buf1[CHUNK_SIZE];
-char buf2[CHUNK_SIZE];
-char * buf_from_file = buf1;
-char * buf_to_file = buf1;
-unsigned int p_c_actual_size;
-bool data_ready = false;
-bool write_finished = true;
+char buf[2][chunk_size];
+unsigned char buf_prod = 0;  // number of buffer for the next operation of producer
+unsigned char buf_cons = 0;  // number of buffer for the next operation of consumer
+unsigned char prod_num = 2;  // number of available for procurer buffers
+unsigned char cons_num = 0;  // number of available for consumer buffers
+unsigned int actual_size;
+bool copy_with_stl = false;
 bool finish = false;
 std::string v_input_name, v_output_name;
 
 mutex mtx;
 condition_variable cv;
-
-void buff_toggle(char ** buf){
-    if(*buf == buf1) *buf = buf2; else *buf = buf1;
-}
-
 
 void producer(const std::string& input_file_name)
 {
@@ -43,23 +35,21 @@ void producer(const std::string& input_file_name)
     while (!input_file.eof()) {
         {
             unique_lock<mutex> lock(mtx);
-            cv.wait(lock, [] { return write_finished; });
-            write_finished = false; 
+            cv.wait(lock, [] { return prod_num > 0; });
+            prod_num--;
         }
-        //cout << "reading" << endl;
-        input_file.read(buf_from_file, CHUNK_SIZE);
-        p_c_actual_size = input_file.gcount();  // transmit size to consumer
+        input_file.read(buf[buf_prod], chunk_size);
+        actual_size = input_file.gcount();  // transmit size to consumer
         {
             lock_guard<mutex> lock(mtx);
-            data_ready = true;        
+            cons_num++;
             cv.notify_one();
         }
-        buff_toggle(&buf_from_file);
+        buf_prod ^= 0x01;
     }
 
     // ===== final part =====
     finish = true;
-    input_file.close();
 }
 
 void consumer(const std::string& output_file_name)
@@ -71,44 +61,43 @@ void consumer(const std::string& output_file_name)
     while(true){
         {
             unique_lock<mutex> lock(mtx);
-            cv.wait(lock, [] { return data_ready; });
-            data_ready = false; 
+            cv.wait(lock, [] { return cons_num > 0; });
+            cons_num--;
         }
-        // cout << "writing" << endl;
-        output_file.write(buf_to_file, p_c_actual_size);
-        buff_toggle(&buf_to_file);
+        output_file.write(buf[buf_cons], actual_size);
+        buf_cons ^= 0x01;
         {
             lock_guard<mutex> lock(mtx);
-            write_finished = true;        
+            prod_num++;
+            if( finish && (cons_num == 0) ) break;
             cv.notify_one();
         }        
-        if(finish) break;
     }
 
-    // ===== final part =====    
-    output_file.close();
+    // ===== final part =====   
 }
 
 int main(int argc, char*argv[])
 {
-    if(2 > argc) {printf("You enter no arguments. For help use --help command.\n"); return 1;}
+    if(2 > argc) {cout << "You enter no arguments. For help use --help command." << endl; return 1;}
 	if(2 == argc){
 		if(strcmp(argv[1], "--help")){
-			printf("Unknown key %s.\n", argv[1]); return 1;
+			cout << "Unknown key " << argv[1] << endl; return 1;
 		}else{
-			printf("Enter copy_file <in file> -a <out file> to copy with implemented here utiity.\n");
-			printf("Enter copy_file <in file> -b <out file> to copy with standard copy_file() function.\n"); 
-			printf("Examples: copy_file input.txt -a output.txt.\n"); 
+			cout << "Enter copy_file <in file> -a <out file> to copy with DIY utiity." << endl;
+			cout << "Enter copy_file <in file> -b <out file> to copy with standard copy_file() function." << endl; 
+			cout << "Examples: copy_file input.txt -a output.txt." << endl; 
 			return 0;
 		}	
 	}
 	if(3 == argc) {printf("Impossible argument combination %s %s. For help use --help command.\n", argv[1], argv[2]); return 1;}
 	if(4 == argc) {
 		if(strcmp(argv[2], "-a") && strcmp(argv[2], "-b")){
-			printf("Uncnown command %s. Enter copy_file --help for help.\n", argv[2]); return 1;
+			cout << "Uncnown command " << argv[2] <<". Enter copy_file --help for help." << endl; return 1;
 		}else{
             v_input_name = argv[1];
             v_output_name = argv[3];
+            if(strcmp(argv[2], "-a")) copy_with_stl = true;
         }
 	}
 	if(4 < argc) {printf("You enter too many arguments. For help use --help command.\n"); return 1;}
@@ -116,9 +105,11 @@ int main(int argc, char*argv[])
     auto start = std::chrono::high_resolution_clock::now();  // start of timer
     // ----------------------------------------------------------------------------------------
 
-    if(COPY_WITH_STL){
+    if(copy_with_stl){
+        cout << "copying with standard library" << endl;
         filesystem::copy_file(v_input_name, v_output_name);
     }else{
+        cout << "copying with DIY" << endl;
         // Create the reader and writer threads
         std::thread reader_thread(producer, v_input_name);
         std::thread writer_thread(consumer, v_output_name);
